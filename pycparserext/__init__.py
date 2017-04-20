@@ -91,7 +91,7 @@ def parse_file(filename, use_cpp=False, cpp_path='cpp', cpp_args='',
         with open(filename, 'rU') as f:
             text = f.read()
     #print "THIS IS THE TEXT"
-    print text
+    #print text
     if parser is None:
         parser = GnuCParser()
     return parser.parse(text, filename)
