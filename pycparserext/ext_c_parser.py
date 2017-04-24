@@ -132,6 +132,12 @@ class TypeDeclExt(c_ast.TypeDecl):
         return TypeDeclExt(td.declname, td.quals, td.type, td.coord)
 
 
+class PtrDeclExt(c_ast.PtrDecl):
+    @staticmethod
+    def from_pycparser(pd):
+        assert isinstance(pd, c_ast.PtrDecl)
+        return PtrDeclExt(pd.quals, pd.type, pd.coord)
+
 class ArrayDeclExt(c_ast.TypeDecl):
     @staticmethod
     def from_pycparser(ad):
@@ -142,6 +148,8 @@ class ArrayDeclExt(c_ast.TypeDecl):
 def to_decl_ext(d):
     if isinstance(d, c_ast.TypeDecl):
         return TypeDeclExt.from_pycparser(d)
+    elif isinstance(d, c_ast.PtrDecl):
+        return PtrDeclExt.from_pycparser(d)
     elif isinstance(d, c_ast.ArrayDecl):
         return ArrayDeclExt.from_pycparser(d)
     else:
@@ -213,7 +221,17 @@ class _AttributesMixin(object):
         """ attribute : assignment_expression
         """
         p[0] = p[1]
-
+    
+    def p_attribute_4(self, p):
+        """ attribute : ID
+        """
+        p[0] = p[1]
+    
+    def p_attribute_5(self, p):
+        """ attribute : ID LPAREN attribute_list RPAREN
+        """
+        p[0] = p[3]
+    
     # {{{ /!\ names must match C parser to override
 
     def p_declarator_1(self, p):
@@ -226,6 +244,9 @@ class _AttributesMixin(object):
             elif isinstance(p[1], c_ast.FuncDecl):
                 p[1].type = to_decl_ext(p[1].type)
                 p[1].type.attributes = p[2]
+            elif isinstance(p[1], c_ast.PtrDecl):
+                p[1] = to_decl_ext(p[1])
+                p[1].attributes = p[2]
             elif not isinstance(p[1], c_ast.TypeDecl):
                 raise NotImplementedError(
                         "cannot attach attributes to nodes of type '%s'"
@@ -380,7 +401,12 @@ class _AsmAndAttributesMixin(_AsmMixin, _AttributesMixin):
             coord=p[1].coord)
 
         p[0] = self._type_modify_decl(decl=p[1], modifier=func)
-
+    
+    def p_direct_declarator_7(self, p):
+        """ direct_declarator   : LPAREN declaration_specifiers declarator RPAREN
+        """
+        p[0] = p[3]
+    
     # }}}
 # }}}
 
@@ -432,7 +458,14 @@ class GnuCParser(_AsmAndAttributesMixin, CParserBase):
         """
         p[0] = c_ast.FuncCall(c_ast.ID(p[1], self._coord(p.lineno(1))),
                 TypeList([p[3], p[5]], self._coord(p.lineno(2))))
-
+    
+    def p_postfix_expression_gnu_bioo(self, p):
+        """ primary_expression  : __BUILTIN_OFFSETOF \
+                LPAREN type_name COMMA offsetof_member_designator RPAREN
+        """
+        coord = self._coord(p.lineno(1))
+        p[0] = c_ast.FuncCall(c_ast.ID(p[1], coord), c_ast.ExprList([p[3], p[5]], coord), coord)
+    
     def p_gnu_statement_expression(self, p):
         """ gnu_statement_expression : LPAREN compound_statement RPAREN
         """
