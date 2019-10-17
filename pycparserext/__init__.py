@@ -12,6 +12,7 @@ __version__ = '2.14'
 
 from subprocess import Popen, PIPE
 from ext_c_parser import GnuCParser
+import re
 
 
 def preprocess_file(filename, cpp_path='cpp', cpp_args=''):
@@ -44,14 +45,15 @@ def preprocess_file(filename, cpp_path='cpp', cpp_args=''):
         #print path_list
         pipe = Popen(   path_list,
                         stdout=PIPE,
+                        stderr=PIPE,
                         universal_newlines=True)
-        text = pipe.communicate()[0]
+        (text, headers) = pipe.communicate()
     except OSError as e:
         raise RuntimeError("Unable to invoke 'cpp'.  " +
             'Make sure its path was passed correctly\n' +
             ('Original error: %s' % e))
 
-    return text
+    return (text,headers)
 
 
 def parse_file(filename, use_cpp=False, cpp_path='cpp', cpp_args='',
@@ -86,12 +88,21 @@ def parse_file(filename, use_cpp=False, cpp_path='cpp', cpp_args='',
         Errors from cpp will be printed out.
     """
     if use_cpp:
-        text = preprocess_file(filename, cpp_path, cpp_args)
+        (text,headertxt) = preprocess_file(filename, cpp_path, cpp_args)
     else:
         with open(filename, 'rU') as f:
             text = f.read()
-    #print "THIS IS THE TEXT"
-    #print text
+            headertxt = ''
+    
+    headers = { 'all': [ ], 'immediate': [ ] }
+    for line in headertxt.split('\n'):
+        matches = re.findall(r'^(\.+)\s(.*)', line)
+        if matches:
+            match = matches[0]
+            if match[0] == '.':
+                headers['immediate'].append(match[1])
+            headers['all'].append(match[1])
+    
     if parser is None:
         parser = GnuCParser()
-    return parser.parse(text, filename)
+    return (parser.parse(text, filename), headers)
